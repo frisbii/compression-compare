@@ -1,24 +1,26 @@
-CC = gcc
-CFLAGS = -lm
-BIN	= ./bin/
+CC      := gcc
+CFLAGS  := -O2 -Wall -Wextra -lm
+BIN_DIR := ./bin
 
+WKDM_LIB := deps/WKdm/WKdm.o
+LZ4_LIB  := deps/lz4/lib/liblz4.a
+ZLIB_LIB := deps/zlib-1.3.2/libz.a
 
-DEPS_DIR = ./deps
-# WKdm
-WKdm_DIR = $(DEPS_DIR)/WKdm
+.PHONY: all WKdm lz4 zlib clean
 
-INCLUDES = -I$(DEPS_DIR)
+all: WKdm lz4 zlib
 
-.PHONY : WKdm lz4
+WKdm: $(BIN_DIR)/WKdm
+$(BIN_DIR)/WKdm: main.c adapters/WKdm_adapter.h
+	$(CC) $(CFLAGS) -DWKdm -o $@ main.c $(WKDM_LIB)
 
-WKdm : $(BIN)/WKdm
-$(BIN)/WKdm : main.c adapters/WKdm_adapter.h
-	$(CC) $(CFLAGS) -DWKdm -o $@ main.c deps/WKdm/WKdm.o  
+lz4: $(BIN_DIR)/lz4
+$(BIN_DIR)/lz4: main.c adapters/lz4_adapter.h
+	$(CC) $(CFLAGS) -Dlz4 -o $@ main.c $(LZ4_LIB)
 
-lz4 : $(BIN)/lz4
-$(BIN)/lz4 : main.c adapters/lz4_adapter.h
-	$(CC) $(CFLAGS) -Dlz4 -o $@ main.c deps/lz4/lib/liblz4.a  
+zlib: $(BIN_DIR)/zlib
+$(BIN_DIR)/zlib: main.c adapters/zlib_adapter.h
+	$(CC) $(CFLAGS) -Dzlib -o $@ main.c $(ZLIB_LIB)
 
-zlib : $(BIN)/zlib
-$(BIN)/zlib : main.c adapters/zlib_adapter.h
-	$(CC) $(CFLAGS) -Dzlib -o $@ main.c deps/zlib-1.3.2/libz.a
+clean:
+	rm -rf $(BIN_DIR)

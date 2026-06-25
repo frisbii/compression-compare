@@ -19,8 +19,8 @@ size_t lz4_wrapper_compress(word* src, word* dst, size_t buffer_size) {
 }
 
 void lz4_wrapper_decompress(word* src, word* dst, size_t buffer_size) {
-    int status = LZ4_decompress_safe((char*) src, (char*) dst, compressed_size, BYTES_PER_PAGE);
-    if (status < 0) {
+    int decompressed_size = LZ4_decompress_safe((char*) src, (char*) dst, compressed_size, BYTES_PER_PAGE);
+    if (decompressed_size < 0) {
         printf("ERROR: LZ4_decompress_safe failed\n");
         exit(-1);
     }

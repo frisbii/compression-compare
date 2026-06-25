@@ -67,12 +67,23 @@ void time_decompression(word* src, word* dst, size_t buffer_size) {
 }
 
 
-int main() {
-    size_t pages = 0;
+int main(int argc, char *argv[]) {
+    if (! (1 <= argc && argc <= 1) ) {
+        fprintf(stderr,
+            "USAGE: %s",
+            argv[0]);
+    }
+
+    int pages = 0;
+
     size_t buffer_size = BYTES_PER_PAGE * 2;
     word* src = (word*) malloc(buffer_size);
     word* dst = (word*) malloc(buffer_size);
     word* copy = (word*) malloc(buffer_size);
+    if (src == NULL || dst == NULL || copy == NULL) {
+        printf("ERROR: could not malloc working buffers\n");
+        exit(-1);
+    }
 
     /* char* image_path = "./ollama_qwen25_coder_32b.page-images";
     FILE* in_stream = fopen(image_path, "r");
@@ -80,7 +91,7 @@ int main() {
         perror("ERROR: could not open image");
     } */
     FILE* in_stream = stdin;
-    printf("page_number,uncompressed_size,compressed_size,compression_time,decompression_time\n");
+    //printf("page_number,uncompressed_size,compressed_size,compression_time,decompression_time\n");
 
     size_t pages_read;
     int page_counter = 0;
@@ -122,8 +133,8 @@ int main() {
             break;
         }
 
-        printf("%s,%d,%d,%d,%ld,%ld\n",
-            compressor.name,
+        // page_number,uncompressed_size,compressed_size,compression_time,decompression_time
+        printf("%d,%d,%d,%ld,%ld\n",
             record.page_number, record.uncompressed_size, record.compressed_size,
             record.compression_time, record.decompression_time);
 

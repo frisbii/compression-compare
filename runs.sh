@@ -1,0 +1,1 @@
+cat images/ollama_qwen25_coder_32b.page-images | bin/zlib > data/zlib_ollama-local.csv
