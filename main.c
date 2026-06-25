@@ -73,7 +73,6 @@ int main() {
         if (pages > 0 && page_counter++ >= pages) {
             break;
         }
-        printf("%d\t", page_counter);
 
         memset((void*) src, -1, buffer_size);
         memset((void*) dst, -1, buffer_size);
@@ -87,6 +86,7 @@ int main() {
             printf("ERROR: could not read image input from buffer");
             exit(-1);
         }
+        printf("%d\t", page_counter);
 
         // prepare a clean copy of the src for verification later
         memcpy((void*) copy, (void*) src, buffer_size);
