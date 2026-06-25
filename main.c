@@ -27,10 +27,10 @@ uint64_t calculate_duration(struct timespec start, struct timespec stop) {
 }
 
 
-size_t time_compression(word* src, word* dst) {
+void time_compression(word* src, word* dst, size_t buffer_size) {
     struct timespec start_time, stop_time;
     clock_gettime(TEST_CLOCK, &start_time);
-    size_t compressed_size = compressor.compress(src, dst);
+    size_t compressed_size = compressor.compress(src, dst, buffer_size);
     clock_gettime(TEST_CLOCK, &stop_time);
 
     printf("Compressed %dB to %dB in %ldns\n", 
@@ -40,10 +40,10 @@ size_t time_compression(word* src, word* dst) {
 }
 
 
-void time_decompression(word* src, word* dst, size_t compressed_size) {
+void time_decompression(word* src, word* dst, size_t buffer_size) {
     struct timespec start_time, stop_time;
     clock_gettime(TEST_CLOCK, &start_time);
-    compressor.decompress(dst, src, compressed_size);
+    compressor.decompress(dst, src, buffer_size);
     clock_gettime(TEST_CLOCK, &stop_time);
 
     printf("Decompressed in %ldns\n", 
@@ -53,9 +53,10 @@ void time_decompression(word* src, word* dst, size_t compressed_size) {
 
 int main() {
     size_t pages = 0;
-    word* src = (word*) malloc(BUFFER_SIZE);
-    word* dst = (word*) malloc(BUFFER_SIZE);
-    word* copy = (word*) malloc(BUFFER_SIZE);
+    size_t buffer_size = BYTES_PER_PAGE * 2;
+    word* src = (word*) malloc(buffer_size);
+    word* dst = (word*) malloc(buffer_size);
+    word* copy = (word*) malloc(buffer_size);
 
     /* char* image_path = "./ollama_qwen25_coder_32b.page-images";
     FILE* in_stream = fopen(image_path, "r");
@@ -72,10 +73,11 @@ int main() {
         if (pages > 0 && page_counter++ >= pages) {
             break;
         }
+        printf("%d\t", page_counter);
 
-        memset((void*) src, -1, BUFFER_SIZE);
-        memset((void*) dst, -1, BUFFER_SIZE);
-        memset((void*) copy, -1, BUFFER_SIZE);
+        memset((void*) src, -1, buffer_size);
+        memset((void*) dst, -1, buffer_size);
+        memset((void*) copy, -1, buffer_size);
 
         pages_read = fread(src, BYTES_PER_PAGE, 1, in_stream);
         if (pages_read != 1) {
@@ -87,14 +89,14 @@ int main() {
         }
 
         // prepare a clean copy of the src for verification later
-        memcpy((void*) copy, (void*) src, BUFFER_SIZE);
-        assert(memcmp((void*) src, (void*) copy, BUFFER_SIZE) == 0);
+        memcpy((void*) copy, (void*) src, buffer_size);
+        assert(memcmp((void*) src, (void*) copy, buffer_size) == 0);
 
-        size_t compressed_size = time_compression(src, dst);
+        time_compression(src, dst, buffer_size);
 
-        memset((void*) src, -1, BUFFER_SIZE);
+        memset((void*) src, -1, buffer_size);
 
-        time_decompression(src, dst, compressed_size);
+        time_decompression(src, dst, buffer_size);
 
         // checks
         memcmp_res = memcmp((void*) src, (void*) copy, BYTES_PER_PAGE);

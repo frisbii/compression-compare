@@ -7,18 +7,20 @@
 
 typedef uint64_t word;
 
-size_t lz4_wrapper_compress(word* src, word* dst) {
-    int compressed_size = LZ4_compress_default((char*) src, (char*) dst, BYTES_PER_PAGE, BUFFER_SIZE);
+int temp;
+
+size_t lz4_wrapper_compress(word* src, word* dst, size_t buffer_size) {
+    int compressed_size = LZ4_compress_default((char*) src, (char*) dst, (int) BYTES_PER_PAGE, (int) buffer_size);
     if (compressed_size < 0) {
         printf("ERROR: LZ4_compress_default failed\n");
         exit(-1);
     }
+    temp = compressed_size;
     return compressed_size;
 }
 
-void lz4_wrapper_decompress(word* src, word* dst, size_t compressed_size) {
-    int status = LZ4_decompress_safe((char*) src, (char*) dst, compressed_size, BYTES_PER_PAGE);
-    printf("%d status\n", status);
+void lz4_wrapper_decompress(word* src, word* dst, size_t buffer_size) {
+    int status = LZ4_decompress_safe((char*) src, (char*) dst, temp, (int) BYTES_PER_PAGE);
     if (status < 0) {
         printf("ERROR: LZ4_decompress_safe failed\n");
         exit(-1);
