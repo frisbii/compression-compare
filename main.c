@@ -7,7 +7,6 @@
 
 #include "constants.h"
 
-/* SELECT ALGORITHM */
 //#define WKdm
 //#define lz4
 
@@ -17,6 +16,12 @@
     #include "adapters/lz4_adapter.h"
 #elif defined zlib
     #include "adapters/zlib_adapter.h"
+#elif defined WK64
+    #include "adapters/WK64_adapter.h"
+#elif defined lzo
+    #include "adapters/lzo_adapter.h"
+#elif defined zstd
+    #include "adapters/zstd_adapter.h"
 #endif
 
 struct Record {

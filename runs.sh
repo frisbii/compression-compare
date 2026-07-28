@@ -5,7 +5,8 @@ trace=~sfkaplan/traces/ollama_qwen25_coder_32b.page-images.xz
 test=ollama
 
 
-binaries=(lz4 WKdm zlib)
+binaries=(lz4 WKdm zlib WK64 zstd lzo)
+#binaries=(zstd)
 outdir=data
 
 for bin in "${binaries[@]}"; do
