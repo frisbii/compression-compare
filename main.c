@@ -8,30 +8,30 @@
 
 #include "constants.h"
 
-//#define WKdm
-//#define lz4
-
 #if defined WKdm
     #include "adapters/WKdm_adapter.h"
+    char* algdef = "WKdm";
 #elif defined lz4
     #include "adapters/lz4_adapter.h"
+    char* algdef = "lz4";
 #elif defined zlib
     #include "adapters/zlib_adapter.h"
+    char* algdef = "zlib";
 #elif defined WK64
     #include "adapters/WK64_adapter.h"
+    char* algdef = "WK64";
 #elif defined lzo
     #include "adapters/lzo_adapter.h"
+    char* algdef = "lzo";
 #elif defined zstd
     #include "adapters/zstd_adapter.h"
+    char* algdef = "zstd";
 #endif
 
 typedef enum {
     NONE,
     CLFLUSH
 } InvalidationMethod;
-
-InvalidationMethod invalidation_method_compress;
-InvalidationMethod invalidation_method_decompress;
 
 typedef enum {
     CSV,
@@ -42,6 +42,9 @@ SinkType sink_type;
 int flush_count = 0;
 
 typedef struct {
+    char trace_name[256];
+    char alg_name[256];
+
     int page_number;
     int iteration_number;
 
@@ -123,14 +126,14 @@ void invalidate_cache_clflush(word* buf, size_t buffer_size) {
 
 void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) {
     switch (method) {
-        case NONE:
-            break;
-        case CLFLUSH:
-            invalidate_cache_clflush(buf, buffer_size);
-            break;
-        default:
-            printf("Help!");
-            exit(1);
+    case NONE:
+        break;
+    case CLFLUSH:
+        invalidate_cache_clflush(buf, buffer_size);
+        break;
+    default:
+        printf("Help!");
+        exit(1);
     }
 }
 
@@ -139,6 +142,9 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
 void flush_records_csv() {
     if (!flush_count) {
         printf(
+            "trace_name,"
+            "alg_name,"
+
             "cache_invalidation_method_compress,"
             "cache_invalidation_method_decompress,"
 
@@ -154,45 +160,92 @@ void flush_records_csv() {
         );
     }
 
-    Record this_record;
     for (int i = 0; i < records_arr_pos; i++) {
-        this_record = records_arr[i];
-        printf("%d,%d,%d,%d,%d,%d,%d,%d\n",
-            this_record.cache_invalidation_method_compress,
-            this_record.cache_invalidation_method_decompress,
+        Record r = records_arr[i];
+        printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
+            r.trace_name,
+            r.alg_name,
+
+            r.cache_invalidation_method_compress,
+            r.cache_invalidation_method_decompress,
     
-            this_record.page_number,
-            this_record.iteration_number,
+            r.page_number,
+            r.iteration_number,
             
-            this_record.compressed_size,
-            this_record.uncompressed_size,    
+            r.compressed_size,
+            r.uncompressed_size,    
             
-            this_record.compression_time,
-            this_record.decompression_time
+            r.compression_time,
+            r.decompression_time
         );
     }
-
-    flush_count++;
 }
 
 void flush_records_sql() {
+    if (!flush_count) {
+        printf(
+            "CREATE TABLE IF NOT EXISTS measurements (\n"
+            "  trace_name TEXT,\n"
+            "  alg_name TEXT,\n"
+            "  cache_invalidation_method_compress INTEGER,\n"
+            "  cache_invalidation_method_decompress INTEGER,\n"
+            "  page_number INTEGER,\n"
+            "  iteration_number INTEGER,\n"
+            "  compressed_size INTEGER,\n"
+            "  uncompressed_size INTEGER,\n"
+            "  compression_time INTEGER,\n"
+            "  decompression_time INTEGER\n"
+            ");\n"
+        );
+    }
 
+    printf("BEGIN TRANSACTION;\n");
+    for (int i = 0; i < records_arr_pos; i++) {
+        Record r = records_arr[i];
+        printf(
+            "INSERT INTO measurements ("
+            "trace_name, "
+            "alg_name, "
+            "cache_invalidation_method_compress, "
+            "cache_invalidation_method_decompress, "
+            "page_number, "
+            "iteration_number, "
+            "compressed_size, "
+            "uncompressed_size, "
+            "compression_time, "
+            "decompression_time"
+            ") VALUES ('%s', '%s', %d, %d, %d, %d, %d, %d, %d, %d);\n",
+
+            r.trace_name,
+            r.alg_name,
+            r.cache_invalidation_method_compress,
+            r.cache_invalidation_method_decompress,
+            r.page_number,
+            r.iteration_number,
+            r.compressed_size,
+            r.uncompressed_size,
+            r.compression_time,
+            r.decompression_time
+        );
+    }
+    printf("COMMIT;\n");
 }
 
 
 
 void flush_records() {
     switch (sink_type) {
-        case CSV:
-            flush_records_csv();
-            break;
-        case SQL:
-            flush_records_sql();
-            break;
-        default:
-            printf("Help!");
-            exit(1);
-    }
+    case CSV:
+        flush_records_csv();
+        break;
+    case SQL:
+        flush_records_sql();
+        break;
+    default:
+        printf("Help!");
+        exit(1);
+}
+    flush_count++;
 }
 
 
@@ -214,13 +267,23 @@ int main(int argc, char *argv[]) {
             argv[0]);
     }
 
-    int pages = 0;
+    // params
+    char* trace_param = "ollama";
+    int num_iterations = 5;
+    int max_pages = 0;
+    record.cache_invalidation_method_compress = NONE;
+    record.cache_invalidation_method_decompress = NONE;
+    sink_type = CSV;
+
+    //
+    strcpy(record.trace_name, trace_param);
+    strcpy(record.alg_name, algdef);
 
     // create working buffers
     size_t buffer_size = BYTES_PER_PAGE * 2;
 
+    // use memalign to ensure page alignment
     word *src, *dst, *copy;
-    // ensure page alignment
     posix_memalign((void**) &src, BYTES_PER_PAGE, buffer_size);
     posix_memalign((void**) &dst, BYTES_PER_PAGE, buffer_size);
     posix_memalign((void**) &copy, BYTES_PER_PAGE, buffer_size);
@@ -229,38 +292,26 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    FILE* in_stream = stdin;
-
-    size_t pages_read;
-    int page_counter = 0, iteration_counter = 0;
-    int memcmp_res;
-
-    // params
-    invalidation_method_compress = NONE;
-    invalidation_method_decompress = NONE;
-    sink_type = CSV;
-
     // read in page images from stdin
+    FILE* in_stream = stdin;
+    int page_count = 0;
+
     while (!feof(in_stream)) {
-        page_counter++;
-        if (pages > 0 && page_counter >= pages) {
+        page_count++;
+        if (max_pages > 0 && page_count >= max_pages) {
             break;
         }
 
         // store params in record
-        record.page_number = page_counter;
-        record.iteration_number = iteration_counter;
-        record.cache_invalidation_method_compress = invalidation_method_compress;
-        record.cache_invalidation_method_decompress = invalidation_method_decompress;
+        record.page_number = page_count;
 
         // clear working buffers
         memset((void*) src, -1, buffer_size);
         memset((void*) dst, -1, buffer_size);
         memset((void*) copy, -1, buffer_size);
-        
 
         // read the page in
-        pages_read = fread(src, BYTES_PER_PAGE, 1, in_stream);
+        size_t pages_read = fread(src, BYTES_PER_PAGE, 1, in_stream);
         if (pages_read != 1) {
             if (feof(in_stream)) {
                 break;
@@ -274,28 +325,41 @@ int main(int argc, char *argv[]) {
         assert(memcmp((void*) src, (void*) copy, buffer_size) == 0);
 
         /////////////////////////////////////////////////////////////////
-        // invalidate src after copying
-        invalidate_cache(invalidation_method_compress, src, buffer_size);
-        
-        // compress src into dst
-        time_compression(src, dst, buffer_size);
-        
-        // erase content in src
-        memset((void*) src, -1, buffer_size);
-        
-        // invalidate dst after compressing into it
-        invalidate_cache(invalidation_method_decompress, dst, buffer_size);
-        
-        // decompress dst into src
-        time_decompression(src, dst, buffer_size);
+        int total_comp_time = 0;
+        int total_decomp_time = 0;
+        for (int i = 0; i < num_iterations; i++) {
+            record.iteration_number = i;
 
-        // verify that we recovered what we put in
-        memcmp_res = memcmp((void*) src, (void*) copy, BYTES_PER_PAGE);
-        if (memcmp_res != 0) {
-            printf("\tHELP! %d bytes off; %d pages in\n", memcmp_res, page_counter);
-            break;
+            // invalidate src after copying
+            invalidate_cache(record.cache_invalidation_method_compress, src, buffer_size);
+            
+            // compress src into dst
+            time_compression(src, dst, buffer_size);
+            
+            // erase content in src
+            memset((void*) src, -1, buffer_size);
+            
+            // invalidate dst after compressing into it
+            invalidate_cache(record.cache_invalidation_method_decompress, dst, buffer_size);
+            
+            // decompress dst into src
+            time_decompression(src, dst, buffer_size);
+    
+            // verify that we recovered what we put in
+            int memcmp_res = memcmp((void*) src, (void*) copy, BYTES_PER_PAGE);
+            if (memcmp_res != 0) {
+                printf("\tHELP! %d bytes off; %d pages in\n", memcmp_res, page_count);
+                exit(1);
+            }
+
+            total_comp_time += record.compression_time;
+            total_decomp_time += record.decompression_time;
         }
 
+        record.compression_time = total_comp_time / num_iterations;
+        record.decompression_time = total_decomp_time / num_iterations;
+
+        // store results
         add_record();
     }
 
