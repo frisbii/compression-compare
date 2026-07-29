@@ -25,19 +25,39 @@
     #include "adapters/zstd_adapter.h"
 #endif
 
-struct Record {
+typedef enum {
+    NONE,
+    CLFLUSH
+} InvalidationMethod;
+
+InvalidationMethod invalidation_method_compress;
+InvalidationMethod invalidation_method_decompress;
+
+typedef enum {
+    CSV,
+    SQL
+} SinkType;
+
+SinkType sink_type;
+int flush_count = 0;
+
+typedef struct {
     int page_number;
     int iteration_number;
 
-    char cache_invalidation_method[50];
+    InvalidationMethod cache_invalidation_method_compress;
+    InvalidationMethod cache_invalidation_method_decompress;
 
     int uncompressed_size;
     int compressed_size;
-    time_t compression_time;
-    time_t decompression_time;
-};
+    int compression_time;
+    int decompression_time;
+} Record;
 
-struct Record record;
+#define RECORDS_ARR_LEN 10000
+Record record;
+Record records_arr[RECORDS_ARR_LEN];
+int records_arr_pos = 0;
 
 
 time_t calculate_duration(struct timespec start, struct timespec stop) {
@@ -88,7 +108,7 @@ void invalidate_cache_clflush(word* buf, size_t buffer_size) {
     
     const int line_size = 64; 
     
-    word* buf_align = (uintptr_t) buf & ~((uintptr_t) line_size - 1);
+    word* buf_align = (word*) ((uintptr_t) buf & ~((uintptr_t) line_size - 1));
     assert(buf == buf_align);
     
     word* pos = buf;
@@ -97,28 +117,92 @@ void invalidate_cache_clflush(word* buf, size_t buffer_size) {
         _mm_clflush(pos);
     }
     _mm_mfence();
-    
 }
 
 
 
-void invalidate_cache(char* method, word* buf, size_t buffer_size) {
-    if (strcmp(method, "clflush")) {
-        invalidate_cache_clflush(buf, buffer_size);
+void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) {
+    switch (method) {
+        case NONE:
+            break;
+        case CLFLUSH:
+            invalidate_cache_clflush(buf, buffer_size);
+            break;
+        default:
+            printf("Help!");
+            exit(1);
     }
 }
 
 
 
-void flush_records() {
+void flush_records_csv() {
+    if (!flush_count) {
+        printf(
+            "cache_invalidation_method_compress,"
+            "cache_invalidation_method_decompress,"
+
+            "page_number,"
+            "iteration_number,"
+
+            "compressed_size,"
+            "uncompressed_size,"
+
+            "compression_time,"
+            "decompression_time"
+            "\n"
+        );
+    }
+
+    Record this_record;
+    for (int i = 0; i < records_arr_pos; i++) {
+        this_record = records_arr[i];
+        printf("%d,%d,%d,%d,%d,%d,%d,%d\n",
+            this_record.cache_invalidation_method_compress,
+            this_record.cache_invalidation_method_decompress,
     
+            this_record.page_number,
+            this_record.iteration_number,
+            
+            this_record.compressed_size,
+            this_record.uncompressed_size,    
+            
+            this_record.compression_time,
+            this_record.decompression_time
+        );
+    }
+
+    flush_count++;
+}
+
+void flush_records_sql() {
+
+}
+
+
+
+void flush_records() {
+    switch (sink_type) {
+        case CSV:
+            flush_records_csv();
+            break;
+        case SQL:
+            flush_records_sql();
+            break;
+        default:
+            printf("Help!");
+            exit(1);
+    }
 }
 
 
 
 void add_record() {
-    // add to a struct holding 1000 records
-    // flush out when full and at the end
+    if (records_arr_pos >= RECORDS_ARR_LEN) {
+        flush_records();
+        records_arr_pos = 0;
+    }
+    records_arr[records_arr_pos++] = record;
 }
 
 
@@ -137,9 +221,9 @@ int main(int argc, char *argv[]) {
 
     word *src, *dst, *copy;
     // ensure page alignment
-    posix_memalign(&src, BYTES_PER_PAGE, buffer_size);
-    posix_memalign(&dst, BYTES_PER_PAGE, buffer_size);
-    posix_memalign(&copy, BYTES_PER_PAGE, buffer_size);
+    posix_memalign((void**) &src, BYTES_PER_PAGE, buffer_size);
+    posix_memalign((void**) &dst, BYTES_PER_PAGE, buffer_size);
+    posix_memalign((void**) &copy, BYTES_PER_PAGE, buffer_size);
     if (src == NULL || dst == NULL || copy == NULL) {
         printf("ERROR: could not malloc working buffers\n");
         exit(-1);
@@ -151,14 +235,23 @@ int main(int argc, char *argv[]) {
     int page_counter = 0, iteration_counter = 0;
     int memcmp_res;
 
+    // params
+    invalidation_method_compress = NONE;
+    invalidation_method_decompress = NONE;
+    sink_type = CSV;
+
     // read in page images from stdin
     while (!feof(in_stream)) {
         page_counter++;
         if (pages > 0 && page_counter >= pages) {
             break;
         }
+
+        // store params in record
         record.page_number = page_counter;
         record.iteration_number = iteration_counter;
+        record.cache_invalidation_method_compress = invalidation_method_compress;
+        record.cache_invalidation_method_decompress = invalidation_method_decompress;
 
         // clear working buffers
         memset((void*) src, -1, buffer_size);
@@ -180,15 +273,20 @@ int main(int argc, char *argv[]) {
         memcpy((void*) copy, (void*) src, buffer_size);
         assert(memcmp((void*) src, (void*) copy, buffer_size) == 0);
 
-        // actual work
-        char* invalidation_method = "clflush";
-        strcpy(record.cache_invalidation_method, invalidation_method);
-        invalidate_cache(invalidation_method, src, buffer_size);
-
+        /////////////////////////////////////////////////////////////////
+        // invalidate src after copying
+        invalidate_cache(invalidation_method_compress, src, buffer_size);
+        
+        // compress src into dst
         time_compression(src, dst, buffer_size);
-
+        
+        // erase content in src
         memset((void*) src, -1, buffer_size);
-
+        
+        // invalidate dst after compressing into it
+        invalidate_cache(invalidation_method_decompress, dst, buffer_size);
+        
+        // decompress dst into src
         time_decompression(src, dst, buffer_size);
 
         // verify that we recovered what we put in
@@ -198,8 +296,9 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        
-
+        add_record();
     }
+
+    flush_records();
     
 }
