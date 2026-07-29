@@ -1,5 +1,5 @@
 CC      := gcc
-CFLAGS  := -O2 -Wall -Wextra -Wno-unused-parameter -lm 
+CFLAGS  := -O2 -Wall -Wextra -Wno-unused-parameter -Wno-maybe-uninitialized -lm 
 BIN_DIR := ./bin
 
 WKDM_LIB := deps/WKdm/WKdm.o

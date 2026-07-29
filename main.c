@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 #include <time.h>
+#include <immintrin.h>
 
 #include "constants.h"
 
@@ -27,6 +28,9 @@
 struct Record {
     int page_number;
     int iteration_number;
+
+    char cache_invalidation_method[50];
+
     int uncompressed_size;
     int compressed_size;
     time_t compression_time;
@@ -78,6 +82,47 @@ void time_decompression(word* src, word* dst, size_t buffer_size) {
 }
 
 
+
+void invalidate_cache_clflush(word* buf, size_t buffer_size) {
+    word* end = buf + buffer_size;
+    
+    const int line_size = 64; 
+    
+    word* buf_align = (uintptr_t) buf & ~((uintptr_t) line_size - 1);
+    assert(buf == buf_align);
+    
+    word* pos = buf;
+    _mm_sfence();
+    for (; pos < end; pos += line_size) {
+        _mm_clflush(pos);
+    }
+    _mm_mfence();
+    
+}
+
+
+
+void invalidate_cache(char* method, word* buf, size_t buffer_size) {
+    if (strcmp(method, "clflush")) {
+        invalidate_cache_clflush(buf, buffer_size);
+    }
+}
+
+
+
+void flush_records() {
+    
+}
+
+
+
+void add_record() {
+    // add to a struct holding 1000 records
+    // flush out when full and at the end
+}
+
+
+
 int main(int argc, char *argv[]) {
     if (! (1 <= argc && argc <= 1) ) {
         fprintf(stderr,
@@ -89,9 +134,12 @@ int main(int argc, char *argv[]) {
 
     // create working buffers
     size_t buffer_size = BYTES_PER_PAGE * 2;
-    word* src = (word*) malloc(buffer_size);
-    word* dst = (word*) malloc(buffer_size);
-    word* copy = (word*) malloc(buffer_size);
+
+    word *src, *dst, *copy;
+    // ensure page alignment
+    posix_memalign(&src, BYTES_PER_PAGE, buffer_size);
+    posix_memalign(&dst, BYTES_PER_PAGE, buffer_size);
+    posix_memalign(&copy, BYTES_PER_PAGE, buffer_size);
     if (src == NULL || dst == NULL || copy == NULL) {
         printf("ERROR: could not malloc working buffers\n");
         exit(-1);
@@ -100,8 +148,9 @@ int main(int argc, char *argv[]) {
     FILE* in_stream = stdin;
 
     size_t pages_read;
-    int page_counter = 0;
+    int page_counter = 0, iteration_counter = 0;
     int memcmp_res;
+
     // read in page images from stdin
     while (!feof(in_stream)) {
         page_counter++;
@@ -109,11 +158,13 @@ int main(int argc, char *argv[]) {
             break;
         }
         record.page_number = page_counter;
+        record.iteration_number = iteration_counter;
 
         // clear working buffers
         memset((void*) src, -1, buffer_size);
         memset((void*) dst, -1, buffer_size);
         memset((void*) copy, -1, buffer_size);
+        
 
         // read the page in
         pages_read = fread(src, BYTES_PER_PAGE, 1, in_stream);
@@ -130,6 +181,10 @@ int main(int argc, char *argv[]) {
         assert(memcmp((void*) src, (void*) copy, buffer_size) == 0);
 
         // actual work
+        char* invalidation_method = "clflush";
+        strcpy(record.cache_invalidation_method, invalidation_method);
+        invalidate_cache(invalidation_method, src, buffer_size);
+
         time_compression(src, dst, buffer_size);
 
         memset((void*) src, -1, buffer_size);
@@ -143,13 +198,7 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        printf("%d,%d,%d,%ld,%ld\n",
-            record.page_number, 
-            record.uncompressed_size, 
-            record.compressed_size,
-            record.compression_time, 
-            record.decompression_time
-        );
+        
 
     }
     
