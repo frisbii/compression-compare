@@ -2,11 +2,15 @@ trace_name=ollama
 trace=./images/REFERENCE_ollama_qwen25_coder_32b.page-images.xz
 
 binaries=(lz4 WKdm zlib WK64 zstd lzo)
-#binaries=(lz4)
+invalidations_c=(none clflush)
+invalidations_dc=(none clflush)
+
 for bin in "${binaries[@]}"; do
-    echo -n "Starting ${bin}..."
+for invc in "${invalidations_c[@]}"; do
+for invdc in "${invalidations_dc[@]}"; do
+    echo -n "Starting ${bin} ${invc} ${invdc}..."
     refdata="./correctness/GOLD_${trace_name}_${bin}.csv"
-    cat "./correctness/REFERENCE_ollama_qwen25_coder_32b.page-images" | "./bin/${bin}" | awk -F',' -v cols="page_number,compressed_size,uncompressed_size" '
+    cat "./correctness/REFERENCE_ollama_qwen25_coder_32b.page-images" | "./bin/${bin}" "REFERENCE_ollama" $invc $invdc "csv" | awk -F',' -v cols="page_number,compressed_size,uncompressed_size" '
 BEGIN {
     # make array of target column names
     split(cols, target_names, ",")
@@ -41,4 +45,6 @@ END {
 }
 ' - "./correctness/GOLD_ollama_${bin}.csv"
     echo "done."
+done
+done
 done

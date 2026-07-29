@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <strings.h>
 #include <assert.h>
 #include <time.h>
 #include <immintrin.h>
@@ -132,7 +133,7 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
         invalidate_cache_clflush(buf, buffer_size);
         break;
     default:
-        printf("Help!");
+        fprintf(stderr, "unknown invalidation method\n");
         exit(1);
     }
 }
@@ -149,7 +150,6 @@ void flush_records_csv() {
             "cache_invalidation_method_decompress,"
 
             "page_number,"
-            "iteration_number,"
 
             "compressed_size,"
             "uncompressed_size,"
@@ -162,7 +162,7 @@ void flush_records_csv() {
 
     for (int i = 0; i < records_arr_pos; i++) {
         Record r = records_arr[i];
-        printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d\n",
+        printf("%s,%s,%d,%d,%d,%d,%d,%d,%d\n",
             r.trace_name,
             r.alg_name,
 
@@ -170,7 +170,6 @@ void flush_records_csv() {
             r.cache_invalidation_method_decompress,
     
             r.page_number,
-            r.iteration_number,
             
             r.compressed_size,
             r.uncompressed_size,    
@@ -190,7 +189,6 @@ void flush_records_sql() {
             "  cache_invalidation_method_compress INTEGER,\n"
             "  cache_invalidation_method_decompress INTEGER,\n"
             "  page_number INTEGER,\n"
-            "  iteration_number INTEGER,\n"
             "  compressed_size INTEGER,\n"
             "  uncompressed_size INTEGER,\n"
             "  compression_time INTEGER,\n"
@@ -209,19 +207,17 @@ void flush_records_sql() {
             "cache_invalidation_method_compress, "
             "cache_invalidation_method_decompress, "
             "page_number, "
-            "iteration_number, "
             "compressed_size, "
             "uncompressed_size, "
             "compression_time, "
             "decompression_time"
-            ") VALUES ('%s', '%s', %d, %d, %d, %d, %d, %d, %d, %d);\n",
+            ") VALUES ('%s', '%s', %d, %d, %d, %d, %d, %d, %d);\n",
 
             r.trace_name,
             r.alg_name,
             r.cache_invalidation_method_compress,
             r.cache_invalidation_method_decompress,
             r.page_number,
-            r.iteration_number,
             r.compressed_size,
             r.uncompressed_size,
             r.compression_time,
@@ -242,7 +238,7 @@ void flush_records() {
         flush_records_sql();
         break;
     default:
-        printf("Help!");
+        fprintf(stderr, "Unknown sink type\n");
         exit(1);
 }
     flush_count++;
@@ -260,23 +256,55 @@ void add_record() {
 
 
 
+
 int main(int argc, char *argv[]) {
-    if (! (1 <= argc && argc <= 1) ) {
+    if (argc != 5) {
         fprintf(stderr,
-            "USAGE: %s",
+            "USAGE: %s TRACE_NAME COMPRESS_INVALIDATION DECOMPRESS_INVALIDATION SINK_TYPE\n",
             argv[0]);
+        fprintf(stderr, "  Invalidation options: none|clflush \n");
+        fprintf(stderr, "  Sink options: csv|sql\n");
+        return 1;
     }
 
-    // params
-    char* trace_param = "ollama";
-    int num_iterations = 5;
-    int max_pages = 0;
-    record.cache_invalidation_method_compress = NONE;
-    record.cache_invalidation_method_decompress = NONE;
-    sink_type = CSV;
+    const char *trace_name = argv[1];
+    const char *compress_arg = argv[2];
+    const char *decompress_arg = argv[3];
+    const char *sink_arg = argv[4];
 
-    //
-    strcpy(record.trace_name, trace_param);
+    // parse invalidation method
+    if (strcmp(compress_arg, "none") == 0) {
+        record.cache_invalidation_method_compress = NONE;
+    } else if (strcmp(compress_arg, "clflush") == 0) {
+        record.cache_invalidation_method_compress = CLFLUSH;
+    } else {
+        fprintf(stderr, "unknown cache invalidation method (compress): %s\n", compress_arg);
+        exit(1);
+    }
+
+    if (strcmp(decompress_arg, "none") == 0) {
+        record.cache_invalidation_method_decompress = NONE;
+    } else if (strcmp(decompress_arg, "clflush") == 0) {
+        record.cache_invalidation_method_decompress = CLFLUSH;
+    } else {
+        fprintf(stderr, "unknown cache invalidation method (decompress): %s\n", decompress_arg);
+        exit(1);
+    }
+
+    // parse sink type
+    if (strcmp(sink_arg, "csv") == 0) {
+        sink_type = CSV;
+    } else if (strcmp(sink_arg, "sql") == 0) {
+        sink_type = SQL;
+    } else {
+        fprintf(stderr, "unknown sink: %s\n", sink_arg);
+        exit(1);
+    }
+
+    int max_pages = 0;
+    int num_iterations = 5;
+
+    strcpy(record.trace_name, trace_name);
     strcpy(record.alg_name, algdef);
 
     // create working buffers
@@ -288,8 +316,8 @@ int main(int argc, char *argv[]) {
     posix_memalign((void**) &dst, BYTES_PER_PAGE, buffer_size);
     posix_memalign((void**) &copy, BYTES_PER_PAGE, buffer_size);
     if (src == NULL || dst == NULL || copy == NULL) {
-        printf("ERROR: could not malloc working buffers\n");
-        exit(-1);
+        fprintf(stderr, "ERROR: could not malloc working buffers\n");
+        exit(1);
     }
 
     // read in page images from stdin
@@ -316,8 +344,8 @@ int main(int argc, char *argv[]) {
             if (feof(in_stream)) {
                 break;
             }
-            printf("ERROR: could not read image input from buffer");
-            exit(-1);
+            fprintf(stderr, "ERROR: could not read image input from buffer");
+            exit(1);
         }
 
         // prepare a clean copy of the src for verification later
@@ -348,7 +376,7 @@ int main(int argc, char *argv[]) {
             // verify that we recovered what we put in
             int memcmp_res = memcmp((void*) src, (void*) copy, BYTES_PER_PAGE);
             if (memcmp_res != 0) {
-                printf("\tHELP! %d bytes off; %d pages in\n", memcmp_res, page_count);
+                fprintf(stderr, "\tHELP! %d bytes off; %d pages in\n", memcmp_res, page_count);
                 exit(1);
             }
 
