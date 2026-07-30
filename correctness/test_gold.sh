@@ -10,7 +10,7 @@ for invc in "${invalidations_c[@]}"; do
 for invdc in "${invalidations_dc[@]}"; do
     echo -n "Starting ${bin} ${invc} ${invdc}..."
     refdata="./correctness/GOLD_${trace_name}_${bin}.csv"
-    cat "./correctness/REFERENCE_ollama_qwen25_coder_32b.page-images" | "./bin/${bin}" "REFERENCE_ollama" $invc $invdc "csv" | awk -F',' -v cols="page_number,compressed_size,uncompressed_size" '
+    cat "./correctness/REFERENCE_ollama_qwen25_coder_32b.page-images" | "./bin/${bin}" $invc $invdc "csv" 1 | awk -F',' -v cols="page_number,compressed_size,uncompressed_size" '
 BEGIN {
     # make array of target column names
     split(cols, target_names, ",")

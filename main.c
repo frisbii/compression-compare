@@ -43,14 +43,7 @@ SinkType sink_type;
 int flush_count = 0;
 
 typedef struct {
-    char trace_name[256];
-    char alg_name[256];
-
     int page_number;
-    int iteration_number;
-
-    InvalidationMethod cache_invalidation_method_compress;
-    InvalidationMethod cache_invalidation_method_decompress;
 
     int uncompressed_size;
     int compressed_size;
@@ -143,12 +136,6 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
 void flush_records_csv() {
     if (!flush_count) {
         printf(
-            "trace_name,"
-            "alg_name,"
-
-            "cache_invalidation_method_compress,"
-            "cache_invalidation_method_decompress,"
-
             "page_number,"
 
             "compressed_size,"
@@ -162,13 +149,7 @@ void flush_records_csv() {
 
     for (int i = 0; i < records_arr_pos; i++) {
         Record r = records_arr[i];
-        printf("%s,%s,%d,%d,%d,%d,%d,%d,%d\n",
-            r.trace_name,
-            r.alg_name,
-
-            r.cache_invalidation_method_compress,
-            r.cache_invalidation_method_decompress,
-    
+        printf("%d,%d,%d,%d,%d\n",
             r.page_number,
             
             r.compressed_size,
@@ -184,10 +165,6 @@ void flush_records_sql() {
     if (!flush_count) {
         printf(
             "CREATE TABLE IF NOT EXISTS measurements (\n"
-            "  trace_name TEXT,\n"
-            "  alg_name TEXT,\n"
-            "  cache_invalidation_method_compress INTEGER,\n"
-            "  cache_invalidation_method_decompress INTEGER,\n"
             "  page_number INTEGER,\n"
             "  compressed_size INTEGER,\n"
             "  uncompressed_size INTEGER,\n"
@@ -202,21 +179,13 @@ void flush_records_sql() {
         Record r = records_arr[i];
         printf(
             "INSERT INTO measurements ("
-            "trace_name, "
-            "alg_name, "
-            "cache_invalidation_method_compress, "
-            "cache_invalidation_method_decompress, "
             "page_number, "
             "compressed_size, "
             "uncompressed_size, "
             "compression_time, "
             "decompression_time"
-            ") VALUES ('%s', '%s', %d, %d, %d, %d, %d, %d, %d);\n",
+            ") VALUES (%d, %d, %d, %d, %d);\n",
 
-            r.trace_name,
-            r.alg_name,
-            r.cache_invalidation_method_compress,
-            r.cache_invalidation_method_decompress,
             r.page_number,
             r.compressed_size,
             r.uncompressed_size,
@@ -260,32 +229,33 @@ void add_record() {
 int main(int argc, char *argv[]) {
     if (argc != 5) {
         fprintf(stderr,
-            "USAGE: %s TRACE_NAME COMPRESS_INVALIDATION DECOMPRESS_INVALIDATION SINK_TYPE\n",
+            "USAGE: %s COMPRESS_INVALIDATION DECOMPRESS_INVALIDATION SINK_TYPE ITERATIONS\n",
             argv[0]);
         fprintf(stderr, "  Invalidation options: none|clflush \n");
         fprintf(stderr, "  Sink options: csv|sql\n");
         return 1;
     }
 
-    const char *trace_name = argv[1];
-    const char *compress_arg = argv[2];
-    const char *decompress_arg = argv[3];
-    const char *sink_arg = argv[4];
+    const char *compress_arg = argv[1];
+    const char *decompress_arg = argv[2];
+    const char *sink_arg = argv[3];
+    const int iterations = atoi(argv[4]);
 
     // parse invalidation method
+    InvalidationMethod invalidation_method_compress, invalidation_method_decompress;
     if (strcmp(compress_arg, "none") == 0) {
-        record.cache_invalidation_method_compress = NONE;
+        invalidation_method_compress = NONE;
     } else if (strcmp(compress_arg, "clflush") == 0) {
-        record.cache_invalidation_method_compress = CLFLUSH;
+        invalidation_method_compress = CLFLUSH;
     } else {
         fprintf(stderr, "unknown cache invalidation method (compress): %s\n", compress_arg);
         exit(1);
     }
 
     if (strcmp(decompress_arg, "none") == 0) {
-        record.cache_invalidation_method_decompress = NONE;
+        invalidation_method_decompress = NONE;
     } else if (strcmp(decompress_arg, "clflush") == 0) {
-        record.cache_invalidation_method_decompress = CLFLUSH;
+        invalidation_method_decompress = CLFLUSH;
     } else {
         fprintf(stderr, "unknown cache invalidation method (decompress): %s\n", decompress_arg);
         exit(1);
@@ -302,10 +272,6 @@ int main(int argc, char *argv[]) {
     }
 
     int max_pages = 0;
-    int num_iterations = 10;
-
-    strcpy(record.trace_name, trace_name);
-    strcpy(record.alg_name, algdef);
 
     // create working buffers
     size_t buffer_size = BYTES_PER_PAGE * 2;
@@ -355,11 +321,9 @@ int main(int argc, char *argv[]) {
         /////////////////////////////////////////////////////////////////
         int total_comp_time = 0;
         int total_decomp_time = 0;
-        for (int i = 0; i < num_iterations; i++) {
-            record.iteration_number = i;
-
+        for (int i = 0; i < iterations; i++) {
             // invalidate src after copying
-            invalidate_cache(record.cache_invalidation_method_compress, src, buffer_size);
+            invalidate_cache(invalidation_method_compress, src, buffer_size);
             
             // compress src into dst
             time_compression(src, dst, buffer_size);
@@ -368,7 +332,7 @@ int main(int argc, char *argv[]) {
             memset((void*) src, -1, buffer_size);
             
             // invalidate dst after compressing into it
-            invalidate_cache(record.cache_invalidation_method_decompress, dst, buffer_size);
+            invalidate_cache(invalidation_method_decompress, dst, buffer_size);
             
             // decompress dst into src
             time_decompression(src, dst, buffer_size);
@@ -384,8 +348,8 @@ int main(int argc, char *argv[]) {
             total_decomp_time += record.decompression_time;
         }
 
-        record.compression_time = total_comp_time / num_iterations;
-        record.decompression_time = total_decomp_time / num_iterations;
+        record.compression_time = total_comp_time / iterations;
+        record.decompression_time = total_decomp_time / iterations;
 
         // store results
         add_record();
