@@ -302,7 +302,7 @@ int main(int argc, char *argv[]) {
     }
 
     int max_pages = 0;
-    int num_iterations = 5;
+    int num_iterations = 10;
 
     strcpy(record.trace_name, trace_name);
     strcpy(record.alg_name, algdef);

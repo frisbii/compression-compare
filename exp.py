@@ -10,10 +10,20 @@ TRACES_DIR = Path("~sfkaplan/traces")
 
 def main():
     traces = [
-        "ollama_qwen25_coder_32b.page-images.xz"
+        #"2026-06-22-build-llvm.page_image.xz",
+        #"2026-06-25-spec-all.page_image.xz",
+        #"login.images.xz",
+        "ollama_qwen25_coder_32b.page-images.xz",
+        #"work-medium.images.xz",
+        #"work-small.images.xz",
     ]
     traces_short = {
-        "ollama_qwen25_coder_32b.page-images.xz" : "ollama"
+        "2026-06-22-build-llvm.page_image.xz" : "build-llvm",
+        "2026-06-25-spec-all.page_image.xz" : "spec-all",
+        "login.images.xz" : "login",
+        "ollama_qwen25_coder_32b.page-images.xz" : "ollama",
+        "work-medium.images.xz" : "work-medium",
+        "work-small.images.xz" : "work-small",
     }
 
     algorithms = [
