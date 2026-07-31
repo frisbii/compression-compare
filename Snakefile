@@ -7,11 +7,11 @@ import polars as pl
 TRACES_DIR = Path("~sfkaplan/traces")
 TRACES = [
     #"build-llvm",
-    "spec-all",
-    "login",
-    "ollama",
+    #"spec-all",
+    #"login",
+    #"ollama",
     "work-medium",
-    "work-small",
+    #"work-small",
 ]
 TRACES_ABBR = {
     "build-llvm" : "2026-06-22-build-llvm.page_image.xz",
@@ -24,21 +24,21 @@ TRACES_ABBR = {
 
 ALGS = [
     "lz4", 
-    "lzo", 
-    "WK64", 
+    #"lzo", 
+    #"WK64", 
     "WKdm", 
-    "zlib", 
+    #"zlib", 
     "zstd"
 ]
 
 INVALIDATION_METHODS = [
     "none",
     "clflush",
-    "large_arr",
-    "rand_large_arr"
+    "largearr",
+    #"randlargearr"
 ]
 
-ITERATIONS = 20
+ITERATIONS = 4
 VERSION = 1
 
 rule all:

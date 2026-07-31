@@ -2,7 +2,7 @@ trace_name=ollama
 trace=./images/REFERENCE_ollama_qwen25_coder_32b.page-images.xz
 
 binaries=(lz4 WKdm zlib WK64 zstd lzo)
-invalidations=(none clflush large_arr rand_large_arr)
+invalidations=(none clflush largearr randlargearr)
 
 for bin in "${binaries[@]}"; do
 for inv in "${invalidations[@]}"; do
@@ -43,6 +43,5 @@ END {
 }
 ' - "./correctness/GOLD_ollama_${bin}.csv"
     echo "done."
-done
 done
 done

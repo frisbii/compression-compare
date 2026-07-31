@@ -32,8 +32,8 @@
 typedef enum {
     NONE,
     CLFLUSH,
-    LARGE_ARR,
-    RAND_LARGE_ARR
+    LARGEARR,
+    RANDLARGEARR
 } InvalidationMethod;
 
 typedef enum {
@@ -105,16 +105,13 @@ void time_decompression(word* src, word* dst, size_t buffer_size) {
 
 
 void invalidate_cache_clflush(word* buf, size_t buffer_size) {
-    word* end = buf + buffer_size;
-
     const int line_size = 64; 
-    
     word* buf_align = (word*) ((uintptr_t) buf & ~((uintptr_t) line_size - 1));
     assert(buf == buf_align);
     
     word* pos = buf;
     _mm_sfence();
-    for (; pos < end; pos += 1) {
+    for (; pos < buf + buffer_size; pos += 1) {
         _mm_clflush(pos);
     }
     _mm_mfence();
@@ -125,10 +122,7 @@ void invalidate_cache_clflush(word* buf, size_t buffer_size) {
 static volatile unsigned char* cache_sweep_buffer = NULL;
 static size_t cache_sweep_size = 64 * 1024 * 1024;  // 64 MB
 
-void invalidate_cache_touch_large_array(word* buf, size_t buffer_size) {
-    (void) buf;
-    (void) buffer_size;
-
+void invalidate_cache_largearray() {
     if (cache_sweep_buffer == NULL) {
         void* raw = NULL;
         if (posix_memalign(&raw, 64, cache_sweep_size) != 0) {
@@ -148,7 +142,7 @@ void invalidate_cache_touch_large_array(word* buf, size_t buffer_size) {
 static volatile long *rand_buffer = NULL;
 static size_t rand_sweep_size = 64 * 1024 * 1024;  // 64 MB
 
-void invalidate_cache_rand_large_array(word* buf, size_t buffer_size) {
+void invalidate_cache_randlargearray() {
     if (rand_buffer == NULL) {
         void* raw = NULL;
         if (posix_memalign(&raw, 64, rand_sweep_size) != 0) {
@@ -174,11 +168,11 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
     case CLFLUSH:
         invalidate_cache_clflush(buf, buffer_size);
         break;
-    case LARGE_ARR:
-        invalidate_cache_touch_large_array(buf, buffer_size);
+    case LARGEARR:
+        invalidate_cache_largearray();
         break;
-    case RAND_LARGE_ARR:
-        invalidate_cache_rand_large_array(buf, buffer_size);
+    case RANDLARGEARR:
+        invalidate_cache_randlargearray();
         break;
     default:
         fprintf(stderr, "unknown invalidation method\n");
@@ -302,10 +296,10 @@ int main(int argc, char *argv[]) {
         record.invalidation_method = NONE;
     } else if (strcmp(inv_arg, "clflush") == 0) {
         record.invalidation_method = CLFLUSH;
-    } else if (strcmp(inv_arg, "large_arr") == 0) {
-        record.invalidation_method = LARGE_ARR;
-    } else if (strcmp(inv_arg, "rand_large_arr") == 0) {
-        record.invalidation_method = RAND_LARGE_ARR;
+    } else if (strcmp(inv_arg, "largearr") == 0) {
+        record.invalidation_method = LARGEARR;
+    } else if (strcmp(inv_arg, "randlargearr") == 0) {
+        record.invalidation_method = RANDLARGEARR;
     } else {
         fprintf(stderr, "unknown cache invalidation method: %s\n", inv_arg);
         exit(1);
