@@ -2,7 +2,7 @@ trace_name=ollama
 trace=./images/REFERENCE_ollama_qwen25_coder_32b.page-images.xz
 
 binaries=(lz4 WKdm zlib WK64 zstd lzo)
-invalidations=(none clflush largearr randlargearr)
+invalidations=(none clflush largearr)
 
 for bin in "${binaries[@]}"; do
 for inv in "${invalidations[@]}"; do

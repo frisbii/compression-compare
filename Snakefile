@@ -9,9 +9,9 @@ TRACES = [
     #"build-llvm",
     #"spec-all",
     #"login",
-    #"ollama",
-    "work-medium",
-    #"work-small",
+    "ollama",
+    #"work-medium",
+    "work-small",
 ]
 TRACES_ABBR = {
     "build-llvm" : "2026-06-22-build-llvm.page_image.xz",
@@ -34,45 +34,46 @@ ALGS = [
 INVALIDATION_METHODS = [
     "none",
     "clflush",
-    "largearr",
-    #"randlargearr"
+    "largearr"
 ]
 
-ITERATIONS = 4
-VERSION = 1
+ITERATIONS = [10]
+VERSION = [1]
 
 rule all:
     input:
-        expand("out/{version}_{trace}_{alg}.parquet",
+        expand("out/{version}_{trace}_{alg}_{iter}_{inv}.parquet",
         version=VERSION,
         trace=TRACES,
-        alg=ALGS)
+        alg=ALGS,
+        iter=ITERATIONS,
+        inv=INVALIDATION_METHODS
+        )
 
 rule run_single:
     output:
         temp("tmp/{version}_{trace}_{alg}_{iter}_{inv}.csv")
-    threads : 1
+    threads: 1
     params:
         trace_file = lambda wildcards: f"{TRACES_DIR / TRACES_ABBR[wildcards.trace]}"
     shell:
         "unxz -c {params.trace_file} | " 
         "bin/{wildcards.alg} {wildcards.inv} csv {wildcards.iter} > {output}"
 
-rule aggregate:
+rule conv_to_parquet:
     input:
-        expand(
-            "tmp/{{version}}_{{trace}}_{{alg}}_{iter}_{inv}.csv",
-            iter=ITERATIONS,
-            inv=INVALIDATION_METHODS
-        )
+        "tmp/{version}_{trace}_{alg}_{iter}_{inv}.csv"
     output:
-        "out/{version}_{trace}_{alg}.parquet"
+        "out/{version}_{trace}_{alg}_{iter}_{inv}.parquet"
+    priority: 10
     run:
-        dfs = []
-        for filepath in input:
-            dfs.append(pl.read_csv(filepath).with_columns([
-                pl.lit(int(wildcards.version)).alias("version"),
-                pl.lit(wildcards.trace).alias("trace"),
-                pl.lit(wildcards.alg).alias("alg")
-            ]))
-        pl.concat(dfs).write_parquet(output[0])
+        pl.read_csv(input[0]).with_columns([
+            pl.lit(int(wildcards.version)).alias("version"),
+            pl.lit(wildcards.trace).alias("trace"),
+            pl.lit(wildcards.alg).alias("alg"),
+            pl.lit(wildcards.iter).alias("iter"),
+            pl.lit(wildcards.inv).alias("inv"),
+        ]).write_parquet(output[0])
+    
+
+

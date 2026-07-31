@@ -1,5 +1,7 @@
-bin/*
-images/*
+bin
+images
+out
+tmp
 
 .vscode
 .snakemake
