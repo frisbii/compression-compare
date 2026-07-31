@@ -31,7 +31,9 @@
 
 typedef enum {
     NONE,
-    CLFLUSH
+    CLFLUSH,
+    LARGE_ARR,
+    RAND_LARGE_ARR
 } InvalidationMethod;
 
 typedef enum {
@@ -43,8 +45,10 @@ SinkType sink_type;
 int flush_count = 0;
 
 typedef struct {
-    int page_number;
+    int iterations;
+    InvalidationMethod invalidation_method;
 
+    int page_number;
     int uncompressed_size;
     int compressed_size;
     int compression_time;
@@ -102,7 +106,7 @@ void time_decompression(word* src, word* dst, size_t buffer_size) {
 
 void invalidate_cache_clflush(word* buf, size_t buffer_size) {
     word* end = buf + buffer_size;
-    
+
     const int line_size = 64; 
     
     word* buf_align = (word*) ((uintptr_t) buf & ~((uintptr_t) line_size - 1));
@@ -110,9 +114,54 @@ void invalidate_cache_clflush(word* buf, size_t buffer_size) {
     
     word* pos = buf;
     _mm_sfence();
-    for (; pos < end; pos += line_size) {
+    for (; pos < end; pos += 1) {
         _mm_clflush(pos);
     }
+    _mm_mfence();
+}
+
+
+
+static volatile unsigned char* cache_sweep_buffer = NULL;
+static size_t cache_sweep_size = 64 * 1024 * 1024;  // 64 MB
+
+void invalidate_cache_touch_large_array(word* buf, size_t buffer_size) {
+    (void) buf;
+    (void) buffer_size;
+
+    if (cache_sweep_buffer == NULL) {
+        void* raw = NULL;
+        if (posix_memalign(&raw, 64, cache_sweep_size) != 0) {
+            fprintf(stderr, "ERROR: could not allocate cache sweep buffer\n");
+            exit(1);
+        }
+        cache_sweep_buffer = (volatile unsigned char*) raw;
+    }
+
+    for (size_t i = 0; i < cache_sweep_size; i += 64) {
+        cache_sweep_buffer[i] = (unsigned char) (i + 1);
+    }
+
+    _mm_mfence();
+}
+
+static volatile long *rand_buffer = NULL;
+static size_t rand_sweep_size = 64 * 1024 * 1024;  // 64 MB
+
+void invalidate_cache_rand_large_array(word* buf, size_t buffer_size) {
+    if (rand_buffer == NULL) {
+        void* raw = NULL;
+        if (posix_memalign(&raw, 64, rand_sweep_size) != 0) {
+            fprintf(stderr, "ERROR: could not allocate cache sweep buffer\n");
+            exit(1);
+        }
+        rand_buffer = (volatile long*) raw;
+    }
+
+    for (size_t i = 0; i < cache_sweep_size; i++) {
+        rand_buffer[i] = rand();
+    }
+
     _mm_mfence();
 }
 
@@ -125,6 +174,12 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
     case CLFLUSH:
         invalidate_cache_clflush(buf, buffer_size);
         break;
+    case LARGE_ARR:
+        invalidate_cache_touch_large_array(buf, buffer_size);
+        break;
+    case RAND_LARGE_ARR:
+        invalidate_cache_rand_large_array(buf, buffer_size);
+        break;
     default:
         fprintf(stderr, "unknown invalidation method\n");
         exit(1);
@@ -136,11 +191,12 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
 void flush_records_csv() {
     if (!flush_count) {
         printf(
-            "page_number,"
+            "iterations,"
+            "invalidation_method,"
 
+            "page_number,"
             "compressed_size,"
             "uncompressed_size,"
-
             "compression_time,"
             "decompression_time"
             "\n"
@@ -149,12 +205,13 @@ void flush_records_csv() {
 
     for (int i = 0; i < records_arr_pos; i++) {
         Record r = records_arr[i];
-        printf("%d,%d,%d,%d,%d\n",
+        printf("%d,%d,%d,%d,%d,%d,%d\n",
+            r.iterations,
+            r.invalidation_method,
+
             r.page_number,
-            
             r.compressed_size,
             r.uncompressed_size,    
-            
             r.compression_time,
             r.decompression_time
         );
@@ -162,7 +219,7 @@ void flush_records_csv() {
 }
 
 void flush_records_sql() {
-    if (!flush_count) {
+    /* if (!flush_count) {
         printf(
             "CREATE TABLE IF NOT EXISTS measurements (\n"
             "  page_number INTEGER,\n"
@@ -193,7 +250,7 @@ void flush_records_sql() {
             r.decompression_time
         );
     }
-    printf("COMMIT;\n");
+    printf("COMMIT;\n"); */
 }
 
 
@@ -227,37 +284,30 @@ void add_record() {
 
 
 int main(int argc, char *argv[]) {
-    if (argc != 5) {
+    if (argc != 4) {
         fprintf(stderr,
-            "USAGE: %s COMPRESS_INVALIDATION DECOMPRESS_INVALIDATION SINK_TYPE ITERATIONS\n",
+            "USAGE: %s COMPRESS_INVALIDATION SINK_TYPE record.iterations\n",
             argv[0]);
         fprintf(stderr, "  Invalidation options: none|clflush \n");
         fprintf(stderr, "  Sink options: csv|sql\n");
         return 1;
     }
 
-    const char *compress_arg = argv[1];
-    const char *decompress_arg = argv[2];
-    const char *sink_arg = argv[3];
-    const int iterations = atoi(argv[4]);
+    const char *inv_arg = argv[1];
+    const char *sink_arg = argv[2];
+    record.iterations = atoi(argv[3]);
 
     // parse invalidation method
-    InvalidationMethod invalidation_method_compress, invalidation_method_decompress;
-    if (strcmp(compress_arg, "none") == 0) {
-        invalidation_method_compress = NONE;
-    } else if (strcmp(compress_arg, "clflush") == 0) {
-        invalidation_method_compress = CLFLUSH;
+    if (strcmp(inv_arg, "none") == 0) {
+        record.invalidation_method = NONE;
+    } else if (strcmp(inv_arg, "clflush") == 0) {
+        record.invalidation_method = CLFLUSH;
+    } else if (strcmp(inv_arg, "large_arr") == 0) {
+        record.invalidation_method = LARGE_ARR;
+    } else if (strcmp(inv_arg, "rand_large_arr") == 0) {
+        record.invalidation_method = RAND_LARGE_ARR;
     } else {
-        fprintf(stderr, "unknown cache invalidation method (compress): %s\n", compress_arg);
-        exit(1);
-    }
-
-    if (strcmp(decompress_arg, "none") == 0) {
-        invalidation_method_decompress = NONE;
-    } else if (strcmp(decompress_arg, "clflush") == 0) {
-        invalidation_method_decompress = CLFLUSH;
-    } else {
-        fprintf(stderr, "unknown cache invalidation method (decompress): %s\n", decompress_arg);
+        fprintf(stderr, "unknown cache invalidation method: %s\n", inv_arg);
         exit(1);
     }
 
@@ -321,9 +371,9 @@ int main(int argc, char *argv[]) {
         /////////////////////////////////////////////////////////////////
         int total_comp_time = 0;
         int total_decomp_time = 0;
-        for (int i = 0; i < iterations; i++) {
+        for (int i = 0; i < record.iterations; i++) {
             // invalidate src after copying
-            invalidate_cache(invalidation_method_compress, src, buffer_size);
+            invalidate_cache(record.invalidation_method, src, buffer_size);
             
             // compress src into dst
             time_compression(src, dst, buffer_size);
@@ -332,7 +382,7 @@ int main(int argc, char *argv[]) {
             memset((void*) src, -1, buffer_size);
             
             // invalidate dst after compressing into it
-            invalidate_cache(invalidation_method_decompress, dst, buffer_size);
+            invalidate_cache(record.invalidation_method, dst, buffer_size);
             
             // decompress dst into src
             time_decompression(src, dst, buffer_size);
@@ -348,8 +398,8 @@ int main(int argc, char *argv[]) {
             total_decomp_time += record.decompression_time;
         }
 
-        record.compression_time = total_comp_time / iterations;
-        record.decompression_time = total_decomp_time / iterations;
+        record.compression_time = total_comp_time / record.iterations;
+        record.decompression_time = total_decomp_time / record.iterations;
 
         // store results
         add_record();
