@@ -119,13 +119,13 @@ void invalidate_cache_clflush(word* buf, size_t buffer_size) {
 
 
 static volatile unsigned char* cache_sweep_buffer = NULL;
-static size_t cache_sweep_size = 40 * 1024 * 1024;  // 64 MB
+static size_t cache_sweep_size = 40 * 1024 * 1024;  // 22 MiB reported L3 cache (?)
 
 void invalidate_cache_largearray() {
     if (cache_sweep_buffer == NULL) {
         void* raw = NULL;
         if (posix_memalign(&raw, 64, cache_sweep_size) != 0) {
-            fprintf(stderr, "ERROR: could not allocate cache sweep buffer\n");
+            fprintf(stderr, "could not allocate cache sweep buffer\n");
             exit(1);
         }
         cache_sweep_buffer = (volatile unsigned char*) raw;
