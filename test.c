@@ -14,8 +14,16 @@ typedef uint64_t word;
 
 #include "deps/lz4/lib/lz4.h"
 
+#include "deps/zstd/lib/zstd.h"
 
 int main() {
+
+    int m = ZSTD_minCLevel();
+    int n = ZSTD_maxCLevel();
+    printf("%d\t%d\n", m, n);
+
+    exit(1);
+
     size_t pages = 1;
     size_t buffer_size = BYTES_PER_PAGE * 2;
     word* src = (word*) malloc(buffer_size);

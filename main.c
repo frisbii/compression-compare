@@ -8,6 +8,7 @@
 #include <immintrin.h>
 
 #include "constants.h"
+#include "records.h"
 
 #if defined WKdm
     #include "adapters/WKdm_adapter.h"
@@ -29,45 +30,19 @@
     char* algdef = "zstd";
 #endif
 
-typedef enum {
-    NONE,
-    CLFLUSH,
-    LARGEARR
-} InvalidationMethod;
-
-typedef enum {
-    CSV,
-    SQL
-} SinkType;
-
-SinkType sink_type;
-int flush_count = 0;
-
 typedef struct {
     uint8_t ref_type_tag;
     uint64_t address_space_id;
     uint64_t page_id;
 } PageImageMetadata;
 
-typedef struct {
-    int iterations;
-    InvalidationMethod invalidation_method;
-
-    int page_number;
-    int uncompressed_size;
-    int compressed_size;
-    int compression_time;
-    int decompression_time;
-} Record;
-
-#define RECORDS_ARR_LEN 10000
+SinkType sink_type;
 Record record;
-Record records_arr[RECORDS_ARR_LEN];
-int records_arr_pos = 0;
 
 int OLD_IMAGE_FORMAT = 1;
 int DEBUG_LEVEL = 0;
 
+// benchmark
 
 time_t calculate_duration(struct timespec start, struct timespec stop) {
     /**
@@ -77,7 +52,6 @@ time_t calculate_duration(struct timespec start, struct timespec stop) {
     uint64_t stop_ns  = (stop.tv_sec  * 1e9) + stop.tv_nsec;
     return stop_ns - start_ns;
 }
-
 
 void time_compression(word* src, word* dst, size_t buffer_size) {
     /**
@@ -95,7 +69,6 @@ void time_compression(word* src, word* dst, size_t buffer_size) {
     record.compression_time = duration;
 }
 
-
 void time_decompression(word* src, word* dst, size_t buffer_size) {
     /**
      * Decompress the content from the dst buffer into the src buffer,
@@ -112,164 +85,22 @@ void time_decompression(word* src, word* dst, size_t buffer_size) {
 
 
 
-void invalidate_cache_clflush(word* buf, size_t buffer_size) {
-    const int line_size = 64; 
-    word* buf_align = (word*) ((uintptr_t) buf & ~((uintptr_t) line_size - 1));
-    assert(buf == buf_align);
-    
-    word* pos = buf;
-    _mm_sfence();
-    for (; pos < buf + buffer_size; pos += 1) {
-        _mm_clflush(pos);
-    }
-    _mm_mfence();
-}
-
-
-
-static volatile unsigned char* cache_sweep_buffer = NULL;
-static size_t cache_sweep_size = 40 * 1024 * 1024;  // 22 MiB reported L3 cache (?)
-
-void invalidate_cache_largearray() {
-    if (cache_sweep_buffer == NULL) {
-        void* raw = NULL;
-        if (posix_memalign(&raw, 64, cache_sweep_size) != 0) {
-            fprintf(stderr, "could not allocate cache sweep buffer\n");
-            exit(1);
-        }
-        cache_sweep_buffer = (volatile unsigned char*) raw;
-    }
-
-    for (size_t i = 0; i < cache_sweep_size; i += 64) {
-        cache_sweep_buffer[i] = (unsigned char) (i + 1);
-    }
-
-    _mm_mfence();
-}
-
-
-
-void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) {
-    switch (method) {
-    case NONE:
-        break;
-    case CLFLUSH:
-        invalidate_cache_clflush(buf, buffer_size);
-        break;
-    case LARGEARR:
-        invalidate_cache_largearray();
-        break;
-    default:
-        fprintf(stderr, "unknown invalidation method\n");
-        exit(1);
-    }
-}
-
-
-
-void flush_records_csv() {
-    if (!flush_count) {
-        printf(
-            "page_number,"
-            "compressed_size,"
-            "uncompressed_size,"
-            "compression_time,"
-            "decompression_time"
-            "\n"
-        );
-    }
-
-    for (int i = 0; i < records_arr_pos; i++) {
-        Record r = records_arr[i];
-        printf("%d,%d,%d,%d,%d\n",
-            r.page_number,
-            r.compressed_size,
-            r.uncompressed_size,    
-            r.compression_time,
-            r.decompression_time
-        );
-    }
-}
-
-void flush_records_sql() {
-    /* if (!flush_count) {
-        printf(
-            "CREATE TABLE IF NOT EXISTS measurements (\n"
-            "  page_number INTEGER,\n"
-            "  compressed_size INTEGER,\n"
-            "  uncompressed_size INTEGER,\n"
-            "  compression_time INTEGER,\n"
-            "  decompression_time INTEGER\n"
-            ");\n"
-        );
-    }
-
-    printf("BEGIN TRANSACTION;\n");
-    for (int i = 0; i < records_arr_pos; i++) {
-        Record r = records_arr[i];
-        printf(
-            "INSERT INTO measurements ("
-            "page_number, "
-            "compressed_size, "
-            "uncompressed_size, "
-            "compression_time, "
-            "decompression_time"
-            ") VALUES (%d, %d, %d, %d, %d);\n",
-
-            r.page_number,
-            r.compressed_size,
-            r.uncompressed_size,
-            r.compression_time,
-            r.decompression_time
-        );
-    }
-    printf("COMMIT;\n"); */
-}
-
-
-
-void flush_records() {
-    switch (sink_type) {
-    case CSV:
-        flush_records_csv();
-        break;
-    case SQL:
-        flush_records_sql();
-        break;
-    default:
-        fprintf(stderr, "Unknown sink type\n");
-        exit(1);
-}
-    flush_count++;
-}
-
-
-
-void add_record() {
-    if (records_arr_pos >= RECORDS_ARR_LEN) {
-        flush_records();
-        records_arr_pos = 0;
-    }
-    records_arr[records_arr_pos++] = record;
-}
-
-
-
-
 int main(int argc, char *argv[]) {
-    if (argc != 4) {
+    if (argc != 5) {
         fprintf(stderr,
-            "USAGE: %s COMPRESS_INVALIDATION SINK_TYPE ITERATIONS\n",
+            "USAGE: %s COMPRESSION_LEVEL CACHE_INVAL_METHOD SINK_TYPE ITERATIONS\n",
             argv[0]);
+        fprintf(stderr, "  Compression level: 1 (fast) - 9 (small) \n");
         fprintf(stderr, "  Invalidation options: none|clflush \n");
         fprintf(stderr, "  Sink options: csv|sql\n");
         fprintf(stderr, "  Iterations: int\n");
         return 1;
     }
 
-    const char *inv_arg = argv[1];
-    const char *sink_arg = argv[2];
-    record.iterations = atoi(argv[3]);
+    record.clevel = atoi(argv[1]);
+    const char *inv_arg = argv[2];
+    const char *sink_arg = argv[3];
+    record.iterations = atoi(argv[4]);
 
     // parse invalidation method
     if (strcmp(inv_arg, "none") == 0) {

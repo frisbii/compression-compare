@@ -14,28 +14,28 @@ ZSTD_LIB := deps/zstd/lib/libzstd.a
 all: WKdm lz4 zlib WK64 lzo zstd
 
 WKdm: $(BIN_DIR)/WKdm
-$(BIN_DIR)/WKdm: main.c adapters/WKdm_adapter.h
-	$(CC) $(CFLAGS) -DWKdm -o $@ main.c $(WKDM_LIB)
+$(BIN_DIR)/WKdm: main.c adapters/WKdm_adapter.h records.c invalidation.c
+	$(CC) $(CFLAGS) -DWKdm -o $@ main.c records.c invalidation.c $(WKDM_LIB)
 
 lz4: $(BIN_DIR)/lz4
-$(BIN_DIR)/lz4: main.c adapters/lz4_adapter.h
-	$(CC) $(CFLAGS) -Dlz4 -o $@ main.c $(LZ4_LIB)
+$(BIN_DIR)/lz4: main.c adapters/lz4_adapter.h records.c invalidation.c
+	$(CC) $(CFLAGS) -Dlz4 -o $@ main.c records.c invalidation.c $(LZ4_LIB)
 
 zlib: $(BIN_DIR)/zlib
-$(BIN_DIR)/zlib: main.c adapters/zlib_adapter.h
-	$(CC) $(CFLAGS) -Dzlib -o $@ main.c $(ZLIB_LIB)
+$(BIN_DIR)/zlib: main.c adapters/zlib_adapter.h records.c invalidation.c
+	$(CC) $(CFLAGS) -Dzlib -o $@ main.c records.c invalidation.c $(ZLIB_LIB)
 
 WK64: $(BIN_DIR)/WK64
-$(BIN_DIR)/WK64: main.c adapters/WK64_adapter.h
-	$(CC) $(CFLAGS) -DWK64 -o $@ main.c $(WK64_LIB)
+$(BIN_DIR)/WK64: main.c adapters/WK64_adapter.h records.c invalidation.c
+	$(CC) $(CFLAGS) -DWK64 -o $@ main.c records.c invalidation.c $(WK64_LIB)
 
 lzo: $(BIN_DIR)/lzo
-$(BIN_DIR)/lzo: main.c adapters/lzo_adapter.h
-	$(CC) $(CFLAGS) -Dlzo -o $@ main.c $(LZO_LIB)
+$(BIN_DIR)/lzo: main.c adapters/lzo_adapter.h records.c invalidation.c
+	$(CC) $(CFLAGS) -Dlzo -o $@ main.c records.c invalidation.c $(LZO_LIB)
 
 zstd: $(BIN_DIR)/zstd
-$(BIN_DIR)/zstd: main.c adapters/zstd_adapter.h
-	$(CC) $(CFLAGS) -Dzstd -o $@ main.c $(ZSTD_LIB)
+$(BIN_DIR)/zstd: main.c adapters/zstd_adapter.h records.c invalidation.c
+	$(CC) $(CFLAGS) -Dzstd -o $@ main.c records.c invalidation.c $(ZSTD_LIB)
 	
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BIN_DIR)/*
