@@ -85,22 +85,32 @@ void time_decompression(word* src, word* dst, size_t buffer_size) {
 
 
 
+void show_usage_and_exit(char *exe) {
+    fprintf(stderr, "USAGE: %s COMPRESSION_LEVEL CACHE_INVAL_METHOD SINK_TYPE ITERATIONS\n", exe);
+    fprintf(stderr, "  Compression level: 1 (fast) - 9 (small) \n");
+    fprintf(stderr, "  Invalidation options: none|clflush \n");
+    fprintf(stderr, "  Sink options: csv|sql\n");
+    fprintf(stderr, "  Iterations: int\n");
+    exit(1);
+}
+
+
+
 int main(int argc, char *argv[]) {
     if (argc != 5) {
-        fprintf(stderr,
-            "USAGE: %s COMPRESSION_LEVEL CACHE_INVAL_METHOD SINK_TYPE ITERATIONS\n",
-            argv[0]);
-        fprintf(stderr, "  Compression level: 1 (fast) - 9 (small) \n");
-        fprintf(stderr, "  Invalidation options: none|clflush \n");
-        fprintf(stderr, "  Sink options: csv|sql\n");
-        fprintf(stderr, "  Iterations: int\n");
-        return 1;
+        show_usage_and_exit(argv[0]);
     }
 
     record.clevel = atoi(argv[1]);
     const char *inv_arg = argv[2];
     const char *sink_arg = argv[3];
     record.iterations = atoi(argv[4]);
+
+    // verify clevel
+    if (!((1 <= record.clevel) && (record.clevel <= 9))) {
+        fprintf(stderr, "invalid compression level: %d\n", record.clevel);
+        show_usage_and_exit(argv[0]);
+    }
 
     // parse invalidation method
     if (strcmp(inv_arg, "none") == 0) {
@@ -111,7 +121,7 @@ int main(int argc, char *argv[]) {
         record.invalidation_method = LARGEARR;
     } else {
         fprintf(stderr, "unknown cache invalidation method: %s\n", inv_arg);
-        exit(1);
+        show_usage_and_exit(argv[0]);
     }
 
     // parse sink type
@@ -121,7 +131,13 @@ int main(int argc, char *argv[]) {
         sink_type = SQL;
     } else {
         fprintf(stderr, "unknown sink: %s\n", sink_arg);
-        exit(1);
+        show_usage_and_exit(argv[0]);
+    }
+
+    // verify iterations
+    if (record.iterations < 1) {
+        fprintf(stderr, "invalid iterations input: %d\n", record.iterations);
+        show_usage_and_exit(argv[0]);
     }
 
     int max_pages = 0;
