@@ -44,6 +44,12 @@ SinkType sink_type;
 int flush_count = 0;
 
 typedef struct {
+    uint8_t ref_type_tag;
+    uint64_t address_space_id;
+    uint64_t page_id;
+} PageImageMetadata;
+
+typedef struct {
     int iterations;
     InvalidationMethod invalidation_method;
 
@@ -58,6 +64,8 @@ typedef struct {
 Record record;
 Record records_arr[RECORDS_ARR_LEN];
 int records_arr_pos = 0;
+
+int DEBUG_LEVEL = 0;
 
 
 time_t calculate_duration(struct timespec start, struct timespec stop) {
@@ -256,10 +264,11 @@ void add_record() {
 int main(int argc, char *argv[]) {
     if (argc != 4) {
         fprintf(stderr,
-            "USAGE: %s COMPRESS_INVALIDATION SINK_TYPE record.iterations\n",
+            "USAGE: %s COMPRESS_INVALIDATION SINK_TYPE ITERATIONS\n",
             argv[0]);
         fprintf(stderr, "  Invalidation options: none|clflush \n");
         fprintf(stderr, "  Sink options: csv|sql\n");
+        fprintf(stderr, "  Iterations: int\n");
         return 1;
     }
 
@@ -296,8 +305,8 @@ int main(int argc, char *argv[]) {
 
     // use memalign to ensure page alignment
     word *src, *dst, *copy;
-    posix_memalign((void**) &src, BYTES_PER_PAGE, buffer_size);
-    posix_memalign((void**) &dst, BYTES_PER_PAGE, buffer_size);
+    posix_memalign((void**)  &src, BYTES_PER_PAGE, buffer_size);
+    posix_memalign((void**)  &dst, BYTES_PER_PAGE, buffer_size);
     posix_memalign((void**) &copy, BYTES_PER_PAGE, buffer_size);
     if (src == NULL || dst == NULL || copy == NULL) {
         fprintf(stderr, "ERROR: could not malloc working buffers\n");
@@ -307,6 +316,7 @@ int main(int argc, char *argv[]) {
     // read in page images from stdin
     FILE* in_stream = stdin;
     int page_count = 0;
+    PageImageMetadata page_image_metadata;
 
     while (!feof(in_stream)) {
         page_count++;
@@ -318,18 +328,30 @@ int main(int argc, char *argv[]) {
         record.page_number = page_count;
 
         // clear working buffers
-        memset((void*) src, -1, buffer_size);
-        memset((void*) dst, -1, buffer_size);
+        memset((void*)  src, -1, buffer_size);
+        memset((void*)  dst, -1, buffer_size);
         memset((void*) copy, -1, buffer_size);
 
-        // read the page in
-        size_t pages_read = fread(src, BYTES_PER_PAGE, 1, in_stream);
-        if (pages_read != 1) {
+        // read the page image
+        //      read the metadata
+        if (fread(&page_image_metadata, sizeof(PageImageMetadata), 1, in_stream) != 1) {
             if (feof(in_stream)) {
                 break;
             }
-            fprintf(stderr, "ERROR: could not read image input from buffer");
+            fprintf(stderr, "ERROR: could not read image input from buffer (failed to get metadata)");
             exit(1);
+        }
+        //      read the actual page
+        if (fread(src, BYTES_PER_PAGE, 1, in_stream) != 1) {
+            if (feof(in_stream)) {
+                break;
+            }
+            fprintf(stderr, "ERROR: could not read image input from buffer (got metadata, but no image)");
+            exit(1);
+        }
+
+        if (DEBUG_LEVEL >= 2) {
+            printf("%X\t%X\t%X\n", page_image_metadata.ref_type_tag, page_image_metadata.address_space_id, page_image_metadata.page_id);
         }
 
         // prepare a clean copy of the src for verification later
@@ -370,9 +392,13 @@ int main(int argc, char *argv[]) {
         record.decompression_time = total_decomp_time / record.iterations;
 
         // store results
-        add_record();
+        if (DEBUG_LEVEL == 0) {
+            add_record();
+        }
     }
 
-    flush_records();
+    if (DEBUG_LEVEL == 0) {
+        flush_records();
+    }
     
 }
