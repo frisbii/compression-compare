@@ -65,6 +65,7 @@ Record record;
 Record records_arr[RECORDS_ARR_LEN];
 int records_arr_pos = 0;
 
+int OLD_IMAGE_FORMAT = 1;
 int DEBUG_LEVEL = 0;
 
 
@@ -169,9 +170,6 @@ void invalidate_cache(InvalidationMethod method, word* buf, size_t buffer_size) 
 void flush_records_csv() {
     if (!flush_count) {
         printf(
-            "iterations,"
-            "invalidation_method,"
-
             "page_number,"
             "compressed_size,"
             "uncompressed_size,"
@@ -183,10 +181,7 @@ void flush_records_csv() {
 
     for (int i = 0; i < records_arr_pos; i++) {
         Record r = records_arr[i];
-        printf("%d,%d,%d,%d,%d,%d,%d\n",
-            r.iterations,
-            r.invalidation_method,
-
+        printf("%d,%d,%d,%d,%d\n",
             r.page_number,
             r.compressed_size,
             r.uncompressed_size,    
@@ -334,12 +329,14 @@ int main(int argc, char *argv[]) {
 
         // read the page image
         //      read the metadata
-        if (fread(&page_image_metadata, sizeof(PageImageMetadata), 1, in_stream) != 1) {
-            if (feof(in_stream)) {
-                break;
+        if (!OLD_IMAGE_FORMAT) {
+            if (fread(&page_image_metadata, sizeof(PageImageMetadata), 1, in_stream) != 1) {
+                if (feof(in_stream)) {
+                    break;
+                }
+                fprintf(stderr, "ERROR: could not read image input from buffer (failed to get metadata)");
+                exit(1);
             }
-            fprintf(stderr, "ERROR: could not read image input from buffer (failed to get metadata)");
-            exit(1);
         }
         //      read the actual page
         if (fread(src, BYTES_PER_PAGE, 1, in_stream) != 1) {

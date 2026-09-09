@@ -4,14 +4,14 @@ import json
 import polars as pl
 
 # Configuration
-TRACES_DIR = Path("~sfkaplan/traces")
+TRACES_DIR = Path("~sfkaplan/old-traces")
 TRACES = [
     #"build-llvm",
-    #"spec-all",
+    "spec-all",
     #"login",
-    "ollama",
+    #"ollama",
     #"work-medium",
-    "work-small",
+    #"work-small",
 ]
 TRACES_ABBR = {
     "build-llvm" : "2026-06-22-build-llvm.page_image.xz",
@@ -28,17 +28,17 @@ ALGS = [
     #"WK64", 
     "WKdm", 
     #"zlib", 
-    "zstd"
+    #"zstd"
 ]
 
 INVALIDATION_METHODS = [
-    "none",
+    #"none",
     "clflush",
-    "largearr"
+    #"largearr"
 ]
 
-ITERATIONS = [10]
-VERSION = [1]
+ITERATIONS = [1]
+VERSION = [3]
 
 rule all:
     input:
