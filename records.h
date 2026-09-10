@@ -10,10 +10,6 @@ typedef enum {
 } SinkType;
 
 typedef struct {
-    int iterations;
-    int clevel;
-    InvalidationMethod invalidation_method;
-
     int page_number;
     int uncompressed_size;
     int compressed_size;

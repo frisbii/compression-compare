@@ -6,12 +6,12 @@ import polars as pl
 # Configuration
 TRACES_DIR = Path("~sfkaplan/old-traces")
 TRACES = [
-    #"build-llvm",
+    "build-llvm",
     "spec-all",
-    #"login",
-    #"ollama",
-    #"work-medium",
-    #"work-small",
+    "login",
+    "ollama",
+    "work-medium",
+    "work-small",
 ]
 TRACES_ABBR = {
     "build-llvm" : "2026-06-22-build-llvm.page_image.xz",
@@ -24,11 +24,11 @@ TRACES_ABBR = {
 
 ALGS = [
     "lz4", 
-    #"lzo", 
+    "lzo", 
     #"WK64", 
-    "WKdm", 
-    #"zlib", 
-    #"zstd"
+    #"WKdm", 
+    "zlib", 
+    "zstd"
 ]
 
 INVALIDATION_METHODS = [
@@ -37,43 +37,44 @@ INVALIDATION_METHODS = [
     #"largearr"
 ]
 
+VERSION = [1]
+CLEVELS = range(1, 10)
 ITERATIONS = [1]
-VERSION = [3]
 
 rule all:
     input:
-        expand("out/{version}_{trace}_{alg}_{iter}_{inv}.parquet",
+        expand("out/{version}_{trace}_{alg}_{clevel}_{inv}_{iter}.parquet",
         version=VERSION,
         trace=TRACES,
         alg=ALGS,
+        clevel=CLEVELS,
+        inv=INVALIDATION_METHODS,
         iter=ITERATIONS,
-        inv=INVALIDATION_METHODS
         )
 
 rule run_single:
     output:
-        temp("tmp/{version}_{trace}_{alg}_{iter}_{inv}.csv")
+        temp("tmp/{version}_{trace}_{alg}_{clevel}_{inv}_{iter}.csv")
     threads: 1
     params:
         trace_file = lambda wildcards: f"{TRACES_DIR / TRACES_ABBR[wildcards.trace]}"
     shell:
         "unxz -c {params.trace_file} | " 
-        "bin/{wildcards.alg} {wildcards.inv} csv {wildcards.iter} > {output}"
+        "bin/{wildcards.alg} {wildcards.clevel} {wildcards.inv} csv {wildcards.iter} > {output}"
 
 rule conv_to_parquet:
     input:
-        "tmp/{version}_{trace}_{alg}_{iter}_{inv}.csv"
+        "tmp/{version}_{trace}_{alg}_{clevel}_{inv}_{iter}.csv"
     output:
-        "out/{version}_{trace}_{alg}_{iter}_{inv}.parquet"
+        "out/{version}_{trace}_{alg}_{clevel}_{inv}_{iter}.parquet"
     priority: 10
     run:
         pl.read_csv(input[0]).with_columns([
             pl.lit(int(wildcards.version)).alias("version"),
             pl.lit(wildcards.trace).alias("trace"),
             pl.lit(wildcards.alg).alias("alg"),
+            pl.lit(int(wildcards.clevel)).alias("clevel"),
             pl.lit(wildcards.iter).alias("iter"),
             pl.lit(wildcards.inv).alias("inv"),
         ]).write_parquet(output[0])
     
-
-

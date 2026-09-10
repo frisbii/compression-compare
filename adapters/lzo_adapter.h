@@ -14,25 +14,36 @@ size_t compressed_size;
 int init = 0;
 void* wrkmem;
 
-size_t lzo_wrapper_compress(word* src, word* dst, size_t buffer_size) {
-    compressed_size = buffer_size;
+size_t lzo_wrapper_compress(word* src, word* dst, size_t buffer_size, int clevel) {
     if (!init) {
         lzo_init();
         init = 1;
     }
 
-    wrkmem = malloc(LZO1X_1_MEM_COMPRESS * 2);
-    int status = lzo1x_1_compress(
-        (lzo_bytep) src, BYTES_PER_PAGE, 
-        (lzo_bytep) dst, &compressed_size, 
-        wrkmem
+    lzo_uint out_len = (lzo_uint) buffer_size;
+
+    void* wrkmem = malloc(LZO1X_999_MEM_COMPRESS);
+    int status = lzo1x_999_compress_level(
+        (const lzo_bytep) src,
+        (lzo_uint) BYTES_PER_PAGE,
+        (lzo_bytep) dst,
+        &out_len,
+        wrkmem,
+        NULL,
+        0,
+        NULL,
+        clevel
     );
+
+    free(wrkmem);
+
     if (status != LZO_E_OK) {
-        printf("ERROR: lzo1x_1_compress failed");
+        printf("ERROR: lzo1x_999_compress_level failed, ret=%d\n", status);
         exit(-1);
     }
 
-    return compressed_size;
+    compressed_size = out_len;
+    return out_len;
 }
 
 void lzo_wrapper_decompress(word* src, word* dst, size_t buffer_size) {
@@ -42,7 +53,7 @@ void lzo_wrapper_decompress(word* src, word* dst, size_t buffer_size) {
         NULL
     );
     if (status != LZO_E_OK) {
-        printf("ERROR: lzo1x_1_compress failed");
+        printf("ERROR: lzo_wrapper_decompress failed, ret=%d\n", status);
         exit(-1);
     }
 }

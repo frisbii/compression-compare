@@ -7,8 +7,21 @@
 
 size_t compressed_size;
 
-size_t zstd_wrapper_compress(word* src, word* dst, size_t bytes) {
-    compressed_size = ZSTD_compress((void*) dst, bytes, (void*) src, BYTES_PER_PAGE, 1);
+size_t zstd_wrapper_compress(word* src, word* dst, size_t bytes, int clevel) {
+
+    int clevel_zstd;
+    switch (clevel) {
+        case 1: clevel_zstd = 0; break;
+        case 2: clevel_zstd = 3; break;
+        case 3: clevel_zstd = 5; break;
+        case 4: clevel_zstd = 8; break;
+        case 5: clevel_zstd = 10; break;
+        case 6: clevel_zstd = 13; break;
+        case 7: clevel_zstd = 15; break;
+        case 8: clevel_zstd = 18; break;
+        case 9: clevel_zstd = 20; break;
+    }
+    compressed_size = ZSTD_compress((void*) dst, bytes, (void*) src, BYTES_PER_PAGE, clevel_zstd);
     if (ZSTD_isError(compressed_size)) {
         printf("ERROR: in ZSTD_compress\n");
         exit(-1);

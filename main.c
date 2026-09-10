@@ -53,13 +53,13 @@ time_t calculate_duration(struct timespec start, struct timespec stop) {
     return stop_ns - start_ns;
 }
 
-void time_compression(word* src, word* dst, size_t buffer_size) {
+void time_compression(word* src, word* dst, size_t buffer_size, int clevel) {
     /**
      * Compress a src buffer of size buffer_size into the dst buffer
      */
     struct timespec start_time, stop_time;
     clock_gettime(TEST_CLOCK, &start_time);
-    size_t compressed_size = compressor.compress(src, dst, buffer_size);
+    size_t compressed_size = compressor.compress(src, dst, buffer_size, clevel);
     clock_gettime(TEST_CLOCK, &stop_time);
 
     time_t duration = calculate_duration(start_time, stop_time);
@@ -101,24 +101,25 @@ int main(int argc, char *argv[]) {
         show_usage_and_exit(argv[0]);
     }
 
-    record.clevel = atoi(argv[1]);
+    int clevel = atoi(argv[1]);
     const char *inv_arg = argv[2];
     const char *sink_arg = argv[3];
-    record.iterations = atoi(argv[4]);
+    int iterations = atoi(argv[4]);
 
     // verify clevel
-    if (!((1 <= record.clevel) && (record.clevel <= 9))) {
-        fprintf(stderr, "invalid compression level: %d\n", record.clevel);
+    if (!((1 <= clevel) && (clevel <= 9))) {
+        fprintf(stderr, "invalid compression level: %d\n", clevel);
         show_usage_and_exit(argv[0]);
     }
 
     // parse invalidation method
+    InvalidationMethod invalidation_method;
     if (strcmp(inv_arg, "none") == 0) {
-        record.invalidation_method = NONE;
+        invalidation_method = NONE;
     } else if (strcmp(inv_arg, "clflush") == 0) {
-        record.invalidation_method = CLFLUSH;
+        invalidation_method = CLFLUSH;
     } else if (strcmp(inv_arg, "largearr") == 0) {
-        record.invalidation_method = LARGEARR;
+        invalidation_method = LARGEARR;
     } else {
         fprintf(stderr, "unknown cache invalidation method: %s\n", inv_arg);
         show_usage_and_exit(argv[0]);
@@ -135,8 +136,8 @@ int main(int argc, char *argv[]) {
     }
 
     // verify iterations
-    if (record.iterations < 1) {
-        fprintf(stderr, "invalid iterations input: %d\n", record.iterations);
+    if (iterations < 1) {
+        fprintf(stderr, "invalid iterations input: %d\n", iterations);
         show_usage_and_exit(argv[0]);
     }
 
@@ -205,18 +206,18 @@ int main(int argc, char *argv[]) {
         /////////////////////////////////////////////////////////////////
         int total_comp_time = 0;
         int total_decomp_time = 0;
-        for (int i = 0; i < record.iterations; i++) {
+        for (int i = 0; i < iterations; i++) {
             // invalidate src after copying
-            invalidate_cache(record.invalidation_method, src, buffer_size);
+            invalidate_cache(invalidation_method, src, buffer_size);
             
             // compress src into dst
-            time_compression(src, dst, buffer_size);
+            time_compression(src, dst, buffer_size, clevel);
             
             // erase content in src
             memset((void*) src, -1, buffer_size);
             
             // invalidate dst after compressing into it
-            invalidate_cache(record.invalidation_method, dst, buffer_size);
+            invalidate_cache(invalidation_method, dst, buffer_size);
             
             // decompress dst into src
             time_decompression(src, dst, buffer_size);
@@ -232,8 +233,8 @@ int main(int argc, char *argv[]) {
             total_decomp_time += record.decompression_time;
         }
 
-        record.compression_time = total_comp_time / record.iterations;
-        record.decompression_time = total_decomp_time / record.iterations;
+        record.compression_time = total_comp_time / iterations;
+        record.decompression_time = total_decomp_time / iterations;
 
         // store results
         if (DEBUG_LEVEL == 0) {
