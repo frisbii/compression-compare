@@ -8,7 +8,7 @@
 #include "../deps/WK64/WK.h"
 
 
-size_t WK64_wrapper_compress(word* src, word* dst, size_t buffer_size) {
+size_t WK64_wrapper_compress(word* src, word* dst, size_t buffer_size, int clevel) {
     WK_packing_word* end = COMPRESS_FUNC((WK_modeling_word*) src,
         (WK_modeling_word*) dst, BYTES_PER_PAGE / BYTES_PER_WORD);
     size_t compressed_size = (end - dst) * sizeof(WK_packing_word);

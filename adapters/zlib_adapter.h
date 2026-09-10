@@ -7,7 +7,13 @@
 #include "../deps/zlib-1.3.2/zlib.h"
 
 size_t zlib_wrapper_compress(word* src, word* dst, size_t bytes, int clevel) {
-    int status = compress2_z((Bytef*) dst, &bytes, (Bytef*) src, bytes, clevel);
+    int status;
+    if (clevel == 0) {
+        status = compress_z((Bytef*) dst, &bytes, (Bytef*) src, bytes);
+    } else {
+        // accepts 1-9
+        status = compress2_z((Bytef*) dst, &bytes, (Bytef*) src, bytes, clevel);
+    }
     if (status != 0) {
         printf("ERROR: in call to compress_z, ret value %d\n", status);
         exit(-1);

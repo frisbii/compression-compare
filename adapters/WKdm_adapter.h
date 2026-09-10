@@ -7,7 +7,7 @@
 
 #define WKdm_BYTES_PER_WORD 4
 
-size_t WKdm_wrapper_compress(word* src, word* dst, size_t buffer_size) {
+size_t WKdm_wrapper_compress(word* src, word* dst, size_t buffer_size, int clevel) {
     return (size_t) WKdm_compress((WK_word*) src, (WK_word*) dst, BYTES_PER_PAGE / WKdm_BYTES_PER_WORD);
 }
 

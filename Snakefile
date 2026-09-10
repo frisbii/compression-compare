@@ -58,6 +58,8 @@ rule run_single:
     threads: 1
     params:
         trace_file = lambda wildcards: f"{TRACES_DIR / TRACES_ABBR[wildcards.trace]}"
+    priority:
+        lambda wildcards : (len(TRACES) - TRACES.index(wildcards.trace)) * 2 + (len(ALGS) - ALGS.index(wildcards.alg))
     shell:
         "unxz -c {params.trace_file} | " 
         "bin/{wildcards.alg} {wildcards.clevel} {wildcards.inv} csv {wildcards.iter} > {output}"
