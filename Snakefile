@@ -4,7 +4,7 @@ import json
 import polars as pl
 
 # Configuration
-TRACES_DIR = Path("~sfkaplan/old-traces")
+""" TRACES_DIR = Path("~sfkaplan/old-traces")
 TRACES = [
     "build-llvm",
     "spec-all",
@@ -20,7 +20,25 @@ TRACES_ABBR = {
     "ollama" : "ollama_qwen25_coder_32b.page-images.xz",
     "work-medium" : "work-medium.images.xz",
     "work-small" : "work-small.images.xz",
-}
+} """
+
+TRACES_DIR = Path("~sfkaplan/traces")
+TRACES = [
+    "new-spec2026-fp"
+]
+TRACES_ABBR = {
+    "new-spec2026-fp" : "spec2026/spec2026-fpspeed.512M.0-pi.stmt.xz"
+} 
+
+"""
+benchbase.stmt.xz
+build-llvm-clang.stmt.xz
+ollama-alpaca.512M.0-pi.stmt.xz
+ollama-interactive.512M.0-pi.stmt.xz
+spec2026-fpspeed.512M.0-pi.stmt.xz
+spec2026-intspeed.512M.0-pi.stmt.xz
+stmt-kernel.512M.0-pi.stmt.xz
+"""
 
 ALGS = [
     "lz4", 
@@ -38,7 +56,7 @@ INVALIDATION_METHODS = [
 ]
 
 VERSION = [1]
-CLEVELS = range(1, 10)
+CLEVELS = range(0, 10)
 ITERATIONS = [1]
 
 rule all:
@@ -59,9 +77,9 @@ rule run_single:
     params:
         trace_file = lambda wildcards: f"{TRACES_DIR / TRACES_ABBR[wildcards.trace]}"
     priority:
-        lambda wildcards : (len(TRACES) - TRACES.index(wildcards.trace)) * 2 + (len(ALGS) - ALGS.index(wildcards.alg))
+        lambda wildcards : (len(TRACES) - TRACES.index(wildcards.trace)) * 100 + (len(ALGS) - ALGS.index(wildcards.alg))
     shell:
-        "unxz -c {params.trace_file} | " 
+        "unxz -c {params.trace_file} | dd bs=100M status=none | " 
         "bin/{wildcards.alg} {wildcards.clevel} {wildcards.inv} csv {wildcards.iter} > {output}"
 
 rule conv_to_parquet:
@@ -69,7 +87,7 @@ rule conv_to_parquet:
         "tmp/{version}_{trace}_{alg}_{clevel}_{inv}_{iter}.csv"
     output:
         "out/{version}_{trace}_{alg}_{clevel}_{inv}_{iter}.parquet"
-    priority: 10
+    priority: 1e9
     run:
         pl.read_csv(input[0]).with_columns([
             pl.lit(int(wildcards.version)).alias("version"),
